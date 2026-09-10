@@ -118,6 +118,27 @@ public sealed class WorldMap
     /// <summary>Whether a land unit can stand on the tile right now.</summary>
     public bool IsWalkable(GridPos pos) => IsInBounds(pos) && Tiles[pos].IsWalkable && !_occupied[pos];
 
+    /// <summary>
+    /// Whether a tile's trees can actually be felled: it has trees, and something can stand beside it.
+    /// </summary>
+    /// <remarks>
+    /// Trees block movement, so a tile in the middle of a wood is walled in by its own neighbours and
+    /// cannot be reached to cut. Woods therefore have to be eaten from the outside in, and any code
+    /// choosing a tree to chop has to respect that or it will send workers to stand somewhere that does
+    /// not exist.
+    /// </remarks>
+    public bool IsCuttable(GridPos pos)
+    {
+        if (!IsInBounds(pos) || !Tiles[pos].HasTrees)
+            return false;
+
+        foreach (var offset in GridPos.Neighbors8)
+            if (IsWalkable(pos + offset))
+                return true;
+
+        return false;
+    }
+
     /// <summary>Whether a building footprint tile is free. Excludes trees, water, rock and other buildings.</summary>
     public bool IsBuildable(GridPos pos) => IsInBounds(pos) && Tiles[pos].IsBuildable && !_occupied[pos];
 

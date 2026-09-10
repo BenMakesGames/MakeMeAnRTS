@@ -17,6 +17,17 @@ internal static class StartSiteChooser
     private readonly record struct Site(GridPos Position, float Score);
 
     /// <summary>
+    /// How far apart starts should be, as a fraction of the map's short side, in order of preference.
+    /// </summary>
+    /// <remarks>
+    /// Tried in turn before giving up on a map. Throwing away an otherwise good map because its two
+    /// best sites are 70 tiles apart instead of 79 is a bad trade: the player waits on another
+    /// generation pass and gets a map no better than the one just discarded. A slightly closer pair of
+    /// starts is a far smaller cost, and the last rung only has to beat "no map at all".
+    /// </remarks>
+    private static readonly float[] SeparationLadder = [0.45f, 0.36f, 0.28f];
+
+    /// <summary>
     /// Chooses <paramref name="playerCount"/> sites that are viable, mutually reachable, and as far
     /// apart as the map allows.
     /// </summary>
@@ -43,13 +54,24 @@ internal static class StartSiteChooser
         if (pool.Count < settings.PlayerCount)
             return null;
 
-        var minimumSeparation = (int)(Math.Min(tiles.Width, tiles.Height) * 0.45f);
+        var shortSide = Math.Min(tiles.Width, tiles.Height);
+        var chosen = SelectSpreadSites(pool, settings.PlayerCount);
 
-        // Seed with the site that has the most room around it, then push every other start away from it.
+        if (chosen is null)
+            return null;
+
+        var closestPair = chosen.SelectMany(a => chosen.Where(b => b != a).Select(b => GridPos.StepDistance(a, b))).Min();
+
+        // The best spread this pool can manage is what it is; the ladder decides whether that is enough.
+        return closestPair >= (int)(shortSide * SeparationLadder[^1]) ? chosen : null;
+    }
+
+    /// <summary>Farthest-point selection: each new start is pushed as far from the existing ones as possible.</summary>
+    private static List<GridPos>? SelectSpreadSites(List<Site> pool, int count)
+    {
         var chosen = new List<GridPos> { pool.MaxBy(site => site.Score).Position };
 
-        // Farthest-point selection: each new start is placed as far from the existing ones as possible.
-        while (chosen.Count < settings.PlayerCount)
+        while (chosen.Count < count)
         {
             var next = pool
                 .Where(site => !chosen.Contains(site.Position))
@@ -64,9 +86,17 @@ internal static class StartSiteChooser
             chosen.Add(next.Value);
         }
 
-        var closestPair = chosen.SelectMany(a => chosen.Where(b => b != a).Select(b => GridPos.StepDistance(a, b))).Min();
+        return chosen;
+    }
 
-        return closestPair >= minimumSeparation ? chosen : null;
+    /// <summary>How well a chosen set of starts scores against the separation ladder, for diagnostics.</summary>
+    public static int SeparationRungFor(int shortSide, int closestPair)
+    {
+        for (var rung = 0; rung < SeparationLadder.Length; rung++)
+            if (closestPair >= (int)(shortSide * SeparationLadder[rung]))
+                return rung;
+
+        return SeparationLadder.Length;
     }
 
     /// <summary>Clears trees and breaks up rock around a start, so the opening minutes are never a lottery.</summary>

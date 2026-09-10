@@ -20,6 +20,11 @@ const string Usage = """
         --center-x N --center-y N  Where to centre a zoomed preview. Defaults to player 1's start.
         --out PATH               Output .bmp path.
 
+      simulate                   Run a match with no window and print what each side owns.
+        --seed N                 Map seed.
+        --seconds N              How much match time to simulate.
+        --report N               Seconds between reports.
+
       font-sample                Render the built-in font's charset to an image.
         --out PATH               Output .bmp path.
 
@@ -34,6 +39,7 @@ try
     {
         "play" => PlayCommand.Run(parsed),
         "map-preview" => MapPreviewCommand.Run(parsed),
+        "simulate" => SimulateCommand.Run(parsed),
         "font-sample" => FontSampleCommand.Run(parsed),
         "help" or "--help" => Print(Usage, 0),
         var unknown => Print($"Unknown command '{unknown}'.{Environment.NewLine}{Environment.NewLine}{Usage}", 2),
