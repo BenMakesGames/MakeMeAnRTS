@@ -453,6 +453,16 @@ public sealed class CpuCommander
         if (army.Count == 0)
             return;
 
+        // Nothing of theirs standing, but someone of theirs in sight: hunt them down. Without this the
+        // last enemy worker survives indefinitely while an army of hundreds explores an empty map.
+        if (FindVisibleEnemyUnit() is { } quarry)
+        {
+            foreach (var soldier in army.Where(unit => unit.Order is UnitOrder.Idle or UnitOrder.Move))
+                soldier.GiveOrder(new UnitOrder.AttackUnit(quarry.Id));
+
+            return;
+        }
+
         var leader = army[0];
         var everyoneStopped = army.All(unit => unit.Order is UnitOrder.Idle);
 
@@ -506,6 +516,17 @@ public sealed class CpuCommander
             if (nearest is not null)
                 soldier.GiveOrder(new UnitOrder.AttackUnit(nearest.Id));
         }
+    }
+
+    /// <summary>Any enemy unit this player can currently see, preferring the one nearest home.</summary>
+    private Unit? FindVisibleEnemyUnit()
+    {
+        var home = _state.BuildingsOf(_playerIndex).FirstOrDefault();
+        var from = home?.Center ?? Vec2.Zero;
+
+        return _state.Units
+            .Where(unit => unit.OwnerIndex != _playerIndex && unit.IsAlive && Player.Vision.IsVisible(unit.Tile))
+            .MinBy(unit => Vec2.DistanceSquared(from, unit.Position));
     }
 
     private void RememberUnreachable(GridPos target)

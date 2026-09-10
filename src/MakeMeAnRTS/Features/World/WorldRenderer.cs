@@ -1,4 +1,3 @@
-using SDL3;
 using MakeMeAnRTS.Core;
 using MakeMeAnRTS.Engine;
 using MakeMeAnRTS.Features.Camera;
@@ -68,25 +67,6 @@ public sealed class WorldRenderer
                 // Alpha tracks abundance, so richer ground simply glows brighter.
                 var alpha = MathHelpers.ToByte(40 + abundance / 255f * 190f);
                 renderer.FillRect(rectX, rectY, width, height, tint.WithAlpha(alpha));
-            }
-        }
-    }
-
-    /// <summary>Draws a whole-map thumbnail into <paramref name="bounds"/>, for the minimap.</summary>
-    public void DrawMinimap(Renderer2D renderer, SDL.Rect bounds)
-    {
-        var scaleX = bounds.W / (float)_map.Width;
-        var scaleY = bounds.H / (float)_map.Height;
-        var pixel = MathF.Ceiling(MathF.Max(scaleX, scaleY));
-
-        for (var y = 0; y < _map.Height; y++)
-        {
-            for (var x = 0; x < _map.Width; x++)
-            {
-                var tile = _map.TileAt(new GridPos(x, y));
-                var color = tile.HasTrees ? WorldColors.TreeCanopy : WorldColors.Shaded(tile.Terrain, tile.Height, x, y);
-
-                renderer.FillRect(bounds.X + x * scaleX, bounds.Y + y * scaleY, pixel, pixel, color);
             }
         }
     }

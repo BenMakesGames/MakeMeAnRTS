@@ -16,8 +16,14 @@ const string Usage = """
         --reveal                 Lift the fog of war.
         --debug                  Turn on the debug overlay.
         --select-all             Select the player's units, to show the panels populated.
+        --select-building KIND   Select one of the player's buildings, e.g. barracks.
         --no-autoplay            Leave the player's seat unplayed.
         --out PATH               Output .bmp path.
+
+      benchmark                  Time the simulation and the renderer on a fast-forwarded match.
+        --seed N                 Map seed.
+        --seconds N              Match time to fast-forward before timing.
+        --frames N               Frames to average over.
 
       map-preview                Render a generated map to an image, without opening a window.
         --seed N                 Map seed.
@@ -52,6 +58,7 @@ try
     {
         "play" => PlayCommand.Run(parsed),
         "screenshot" => ScreenshotCommand.Run(parsed),
+        "benchmark" => BenchmarkCommand.Run(parsed),
         "map-preview" => MapPreviewCommand.Run(parsed),
         "simulate" => SimulateCommand.Run(parsed),
         "font-sample" => FontSampleCommand.Run(parsed),

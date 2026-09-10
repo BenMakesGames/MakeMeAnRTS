@@ -41,7 +41,7 @@ public static class ScreenshotCommand
         using var audio = AudioDevice.Open();
 
         var renderer = new Renderer2D(platform.Renderer, font);
-        var screen = new GameScreen(settings, windowWidth, windowHeight, audio) { RevealEverything = args.HasFlag("reveal") };
+        using var screen = new GameScreen(settings, windowWidth, windowHeight, audio, renderer) { RevealEverything = args.HasFlag("reveal") };
 
         // The human seat has nobody at it here, so give it a CPU too; otherwise the picture is of four
         // citizens chopping wood forever while the opponent builds an empire, which shows nothing.
@@ -75,6 +75,9 @@ public static class ScreenshotCommand
         if (args.HasFlag("select-all"))
             SelectEverything(screen);
 
+        if (args.Enum<Features.Buildings.BuildingKind>("select-building") is { } wanted)
+            SelectBuilding(screen, wanted);
+
         screen.Draw(renderer);
         Screenshot.Save(platform.Renderer, outputPath);
 
@@ -98,6 +101,17 @@ public static class ScreenshotCommand
         var units = screen.State.UnitsOf(0).ToList();
         if (units.Count > 0)
             screen.Controller.Selection.SelectUnits(units, add: false);
+    }
+
+    /// <summary>Selects one of the player's buildings, to show the training panel populated.</summary>
+    private static void SelectBuilding(GameScreen screen, Features.Buildings.BuildingKind kind)
+    {
+        var building = screen.State.BuildingsOf(0).FirstOrDefault(candidate => candidate.Kind == kind);
+
+        if (building is not null)
+            screen.Controller.Selection.SelectBuilding(building);
+        else
+            Console.WriteLine($"No {kind} to select; the player has not built one yet.");
     }
 
     private static void Press(GameScreen screen, SDL3.SDL.Scancode key)

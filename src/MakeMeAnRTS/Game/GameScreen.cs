@@ -24,7 +24,7 @@ namespace MakeMeAnRTS.Game;
 /// place that knows the order they go in. Update and Draw are separate and Draw changes no state, which
 /// is what lets a screenshot be taken of any moment without disturbing the match.
 /// </remarks>
-public sealed class GameScreen
+public sealed class GameScreen : IDisposable
 {
     /// <summary>The human player is always seat 0.</summary>
     private const int HumanPlayerIndex = 0;
@@ -42,12 +42,16 @@ public sealed class GameScreen
     private readonly SignRenderer _signRenderer;
     private readonly FogRenderer _fogRenderer;
     private readonly SelectionRenderer _selectionRenderer;
+    private readonly MinimapRenderer _minimapRenderer;
     private readonly HudRenderer _hudRenderer;
     private readonly DebugOverlay _debugOverlay;
     private readonly SoundBoard _sound;
 
     private HudLayout _layout;
     private int _lastMessageRevision;
+
+    /// <summary>The last step's length, so drawing can drive time-based refreshes without its own clock.</summary>
+    private float _lastDeltaSeconds;
 
     public MatchState State => _state;
     public Camera2D Camera => _camera;
@@ -56,10 +60,14 @@ public sealed class GameScreen
     /// <summary>Reveals the whole map. For the debug overlay and for looking at a finished match.</summary>
     public bool RevealEverything { get; set; }
 
-    public GameScreen(WorldGenSettings worldSettings, int windowWidth, int windowHeight, AudioDevice audio)
+    /// <param name="renderer">
+    /// Needed up front because the minimap keeps a texture, which cannot exist without a renderer.
+    /// </param>
+    public GameScreen(WorldGenSettings worldSettings, int windowWidth, int windowHeight, AudioDevice audio, Renderer2D renderer)
     {
         ArgumentNullException.ThrowIfNull(worldSettings);
         ArgumentNullException.ThrowIfNull(audio);
+        ArgumentNullException.ThrowIfNull(renderer);
 
         _state = MatchSetup.Create(worldSettings);
         _runner = new MatchRunner(_state);
@@ -78,7 +86,8 @@ public sealed class GameScreen
         _signRenderer = new SignRenderer();
         _fogRenderer = new FogRenderer();
         _selectionRenderer = new SelectionRenderer(_state);
-        _hudRenderer = new HudRenderer(_state, _worldRenderer, HumanPlayerIndex);
+        _minimapRenderer = new MinimapRenderer(renderer.Handle, _state, HumanPlayerIndex);
+        _hudRenderer = new HudRenderer(_state, _minimapRenderer, HumanPlayerIndex);
         _debugOverlay = new DebugOverlay(_state);
         _sound = new SoundBoard(audio, _state, HumanPlayerIndex);
 
@@ -97,6 +106,7 @@ public sealed class GameScreen
     {
         ArgumentNullException.ThrowIfNull(input);
 
+        _lastDeltaSeconds = deltaSeconds;
         _controller.Update(input, deltaSeconds, _layout.Minimap);
         _camera.Update(input, deltaSeconds);
 
@@ -144,8 +154,10 @@ public sealed class GameScreen
             _debugOverlay.Draw(renderer, _camera, HumanPlayerIndex);
 
         renderer.SetClip(null);
-        _hudRenderer.Draw(renderer, _camera, _controller, _layout);
+        _hudRenderer.Draw(renderer, _camera, _controller, _layout, _lastDeltaSeconds);
     }
+
+    public void Dispose() => _minimapRenderer.Dispose();
 
     /// <summary>
     /// The sight this frame is drawn through. Revealing everything hands over a full-map view, which is

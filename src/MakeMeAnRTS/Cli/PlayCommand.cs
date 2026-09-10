@@ -28,7 +28,7 @@ public static class PlayCommand
         using var audio = AudioDevice.Open();
 
         var renderer = new Renderer2D(platform.Renderer, font);
-        var screen = new GameScreen(settings, windowWidth, windowHeight, audio);
+        using var screen = new GameScreen(settings, windowWidth, windowHeight, audio, renderer);
 
         if (!audio.IsAvailable)
             Console.WriteLine("No audio device available; playing without sound.");

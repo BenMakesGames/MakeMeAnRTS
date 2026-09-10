@@ -24,28 +24,28 @@ public sealed class HudRenderer
     private const float MessageSeconds = 4f;
 
     private readonly MatchState _state;
-    private readonly WorldRenderer _world;
+    private readonly MinimapRenderer _minimap;
     private readonly int _playerIndex;
 
-    public HudRenderer(MatchState state, WorldRenderer world, int playerIndex)
+    public HudRenderer(MatchState state, MinimapRenderer minimap, int playerIndex)
     {
         ArgumentNullException.ThrowIfNull(state);
-        ArgumentNullException.ThrowIfNull(world);
+        ArgumentNullException.ThrowIfNull(minimap);
 
         _state = state;
-        _world = world;
+        _minimap = minimap;
         _playerIndex = playerIndex;
     }
 
     private Player Player => _state.PlayerAt(_playerIndex);
 
-    public void Draw(Renderer2D renderer, Camera2D camera, PlayerController controller, HudLayout layout)
+    public void Draw(Renderer2D renderer, Camera2D camera, PlayerController controller, HudLayout layout, float deltaSeconds)
     {
         ArgumentNullException.ThrowIfNull(controller);
 
         DrawTopBar(renderer, layout);
         DrawBottomBar(renderer, layout);
-        DrawMinimap(renderer, camera, layout);
+        _minimap.Draw(renderer, camera, layout.Minimap, deltaSeconds);
         DrawSelectionPanel(renderer, controller, layout);
         DrawCommandPanel(renderer, controller, layout);
         DrawMessage(renderer, controller, layout);
@@ -87,61 +87,6 @@ public sealed class HudRenderer
     {
         renderer.FillRect(layout.BottomBar.X, layout.BottomBar.Y, layout.BottomBar.W, layout.BottomBar.H, HudColors.PanelBackground);
         renderer.FillRect(layout.BottomBar.X, layout.BottomBar.Y, layout.BottomBar.W, 1, HudColors.PanelBorder);
-    }
-
-    private void DrawMinimap(Renderer2D renderer, Camera2D camera, HudLayout layout)
-    {
-        var bounds = layout.Minimap;
-
-        renderer.SetClip(bounds);
-        _world.DrawMinimap(renderer, bounds);
-
-        var scaleX = bounds.W / (float)_state.Map.Width;
-        var scaleY = bounds.H / (float)_state.Map.Height;
-
-        // Unexplored ground is blanked out, so the minimap shows what this player knows, not the truth.
-        for (var y = 0; y < _state.Map.Height; y++)
-        {
-            for (var x = 0; x < _state.Map.Width; x++)
-            {
-                if (Player.Vision.IsExplored(new GridPos(x, y)))
-                    continue;
-
-                renderer.FillRect(bounds.X + x * scaleX, bounds.Y + y * scaleY, MathF.Ceiling(scaleX), MathF.Ceiling(scaleY), Palette.Rgb(10, 11, 15));
-            }
-        }
-
-        foreach (var building in _state.Buildings)
-        {
-            if (building.OwnerIndex != _playerIndex && !Player.Vision.IsExplored(building.Center.ToTile()))
-                continue;
-
-            var color = _state.PlayerAt(building.OwnerIndex).Color;
-            var size = MathF.Max(3f, building.Stats.Size * scaleX);
-
-            renderer.FillRect(bounds.X + building.Origin.X * scaleX, bounds.Y + building.Origin.Y * scaleY, size, size, color);
-        }
-
-        foreach (var unit in _state.Units)
-        {
-            if (unit.OwnerIndex != _playerIndex && !Player.Vision.IsVisible(unit.Tile))
-                continue;
-
-            var color = _state.PlayerAt(unit.OwnerIndex).Color;
-            renderer.FillRect(bounds.X + unit.Position.X * scaleX, bounds.Y + unit.Position.Y * scaleY, 2f, 2f, color);
-        }
-
-        // The camera box, so the minimap says where you are as well as what is out there.
-        var (min, max) = camera.VisibleTileRange();
-        renderer.DrawRect(
-            bounds.X + min.X * scaleX,
-            bounds.Y + min.Y * scaleY,
-            (max.X - min.X) * scaleX,
-            (max.Y - min.Y) * scaleY,
-            Palette.Rgba(255, 255, 255, 190));
-
-        renderer.SetClip(null);
-        renderer.DrawRect(bounds.X, bounds.Y, bounds.W, bounds.H, HudColors.PanelBorder);
     }
 
     private void DrawSelectionPanel(Renderer2D renderer, PlayerController controller, HudLayout layout)

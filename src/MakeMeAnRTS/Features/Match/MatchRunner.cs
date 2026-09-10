@@ -73,11 +73,14 @@ public sealed class MatchRunner
     }
 
     /// <summary>
-    /// A side with nothing left on the map is out; when one side remains, it has won.
+    /// A side that can no longer recover is out; when one side remains, it has won.
     /// </summary>
     /// <remarks>
-    /// Losing every building is not enough on its own - a player with citizens still alive can rebuild,
-    /// and ending the match while they can still act would be wrong.
+    /// Losing every building is not enough on its own - a player with a citizen alive can rebuild, and
+    /// ending the match while they can still act would be wrong. Losing every building *and* every
+    /// citizen is different: nothing is left that could ever put a building back, so whatever survives
+    /// is running away rather than playing. Requiring literally nothing to remain meant a single fleeing
+    /// scout kept a decided match open indefinitely.
     /// </remarks>
     private void CheckForWinner()
     {
@@ -86,8 +89,9 @@ public sealed class MatchRunner
             if (player.IsDefeated)
                 continue;
 
-            var hasAnything = _state.BuildingsOf(player.Index).Any() || _state.UnitsOf(player.Index).Any();
-            if (!hasAnything)
+            var canRebuild = _state.UnitsOf(player.Index).Any(unit => unit.Stats.CanBuild);
+
+            if (!_state.BuildingsOf(player.Index).Any() && !canRebuild)
                 player.IsDefeated = true;
         }
 
