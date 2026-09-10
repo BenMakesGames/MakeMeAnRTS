@@ -1,25 +1,53 @@
-using MakeMeAnRTS.Engine;
+using MakeMeAnRTS.Cli;
 
-using var platform = Platform.Create("MakeMeAnRTS - font sample", 480, 200, PlatformMode.Offscreen);
-using var font = BitmapFont.Create(platform.Renderer);
+// Commands other than "play" exist to inspect the game from a terminal, with no display attached.
+const string Usage = """
+    MakeMeAnRTS
 
-var renderer = new Renderer2D(platform.Renderer, font);
-renderer.Clear(Palette.Rgb(24, 28, 36));
+      play                       Play the game in a window (the default).
+        --seed N                 Map seed. Omitted means a random map.
+        --width N --height N     Map size in tiles.
 
-var lines = new[]
+      map-preview                Render a generated map to an image, without opening a window.
+        --seed N                 Map seed.
+        --width N --height N     Map size in tiles.
+        --scale N                Pixels per tile in the output image.
+        --rivers N               How many rivers to source.
+        --forest F               Forest density, 0..1.
+        --water F                Water level, 0..1.
+        --overlay NAME           Draw a mineral heat map: stone, iron or gold.
+        --tiles N                Zoom in on N tiles across instead of the whole map.
+        --center-x N --center-y N  Where to centre a zoomed preview. Defaults to player 1's start.
+        --out PATH               Output .bmp path.
+
+      font-sample                Render the built-in font's charset to an image.
+        --out PATH               Output .bmp path.
+
+    Convert any .bmp output to .png with: tools/bmp2png.py FILE
+    """;
+
+try
 {
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-    "abcdefghijklmnopqrstuvwxyz",
-    "0123456789 !\"#$%&'()*+,-./",
-    ":;<=>?@[\\]^_`{|}~",
-    "Wood 120  Stone 45  Iron 8",
-};
+    var parsed = new CommandLineArgs(args);
 
-for (var i = 0; i < lines.Length; i++)
-    renderer.DrawText(lines[i], 8, 8 + i * 16, Palette.White, 2);
+    return (parsed.Command ?? "play") switch
+    {
+        "play" => PlayCommand.Run(parsed),
+        "map-preview" => MapPreviewCommand.Run(parsed),
+        "font-sample" => FontSampleCommand.Run(parsed),
+        "help" or "--help" => Print(Usage, 0),
+        var unknown => Print($"Unknown command '{unknown}'.{Environment.NewLine}{Environment.NewLine}{Usage}", 2),
+    };
+}
+catch (CommandLineException error)
+{
+    return Print($"{error.Message}{Environment.NewLine}{Environment.NewLine}{Usage}", 2);
+}
 
-renderer.DrawText("scale 1: The quick brown fox jumps over the lazy dog.", 8, 100, Palette.Rgb(180, 220, 160));
-renderer.DrawText("scale 3: 1234", 8, 120, Palette.Rgb(240, 200, 90), 3);
+static int Print(string message, int exitCode)
+{
+    var destination = exitCode == 0 ? Console.Out : Console.Error;
+    destination.WriteLine(message);
 
-Screenshot.Save(platform.Renderer, "/tmp/claude-0/font-sample.bmp");
-Console.WriteLine("wrote /tmp/claude-0/font-sample.bmp");
+    return exitCode;
+}
