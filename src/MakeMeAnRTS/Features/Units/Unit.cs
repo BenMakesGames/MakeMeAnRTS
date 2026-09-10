@@ -35,6 +35,16 @@ public sealed class Unit
     /// <summary>Where the unit is hauling its load. Null when it is not making a delivery.</summary>
     public int? DeliveryTargetId { get; set; }
 
+    /// <summary>
+    /// How long the unit has been unable to make progress towards its goal.
+    /// </summary>
+    /// <remarks>
+    /// Pathfinding answers an unreachable request with the best partial route, which is right for a unit
+    /// that should still walk as far as it can - but it means arrival never happens and the order would
+    /// never end. This is what lets a unit conclude it cannot get there and give up.
+    /// </remarks>
+    public float BlockedSeconds { get; set; }
+
     public bool IsAlive => Health > 0f;
     public bool IsCarryingFullLoad => CarriedAmount >= Stats.CarryCapacity && Stats.CarryCapacity > 0;
     public GridPos Tile => Position.ToTile();
@@ -66,6 +76,7 @@ public sealed class Unit
         Order = order;
         ClearPath();
         RepathCooldown = 0f;
+        BlockedSeconds = 0f;
     }
 
     public void SetPath(IEnumerable<GridPos> path)

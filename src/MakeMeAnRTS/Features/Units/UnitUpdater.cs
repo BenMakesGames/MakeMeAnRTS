@@ -23,6 +23,9 @@ public sealed class UnitUpdater
     /// <summary>How close to a waypoint's centre counts as having reached it, in tiles.</summary>
     private const float WaypointReachedDistance = 0.08f;
 
+    /// <summary>How long a unit tries to reach somewhere it cannot get to before abandoning the order.</summary>
+    private const float GiveUpSeconds = 2.5f;
+
     private readonly MatchState _state;
 
     public UnitUpdater(MatchState state)
@@ -62,7 +65,8 @@ public sealed class UnitUpdater
                 break;
 
             case UnitOrder.Move move:
-                if (StepTowards(unit, PathGoal.Exactly(move.Destination), deltaSeconds))
+                // Arriving and giving up both end the order; the unit stops either way.
+                if (StepTowards(unit, PathGoal.Exactly(move.Destination), deltaSeconds) != MoveOutcome.Moving)
                     unit.GiveOrder(UnitOrder.Idle.Instance);
                 break;
 
@@ -135,8 +139,16 @@ public sealed class UnitUpdater
         }
 
         // Trees block movement, so the goal is a tile beside them, not the tile itself.
-        if (!StepTowards(unit, PathGoal.Adjacent(order.Tree), deltaSeconds))
-            return;
+        switch (StepTowards(unit, PathGoal.Adjacent(order.Tree), deltaSeconds))
+        {
+            case MoveOutcome.Moving:
+                return;
+
+            case MoveOutcome.GaveUp:
+                // Cannot get to this stand - try the nearest other one rather than standing here.
+                RetargetWood(unit, order.Tree);
+                return;
+        }
 
         unit.GatherProgress += unit.Stats.GatherRate * deltaSeconds;
 
@@ -182,7 +194,16 @@ public sealed class UnitUpdater
             return;
         }
 
-        if (!StepTowards(unit, PathGoal.Adjacent(mine.Origin, mine.Stats.Size), deltaSeconds))
+        var approach = StepTowards(unit, PathGoal.Adjacent(mine.Origin, mine.Stats.Size), deltaSeconds);
+
+        if (approach == MoveOutcome.GaveUp)
+        {
+            mine.RemoveWorker(unit.Id);
+            unit.GiveOrder(UnitOrder.Idle.Instance);
+            return;
+        }
+
+        if (approach == MoveOutcome.Moving)
             return;
 
         unit.GatherProgress += unit.Stats.GatherRate * deltaSeconds;
@@ -232,8 +253,15 @@ public sealed class UnitUpdater
             return;
         }
 
-        if (!StepTowards(unit, PathGoal.Adjacent(site.Origin, site.Stats.Size), deltaSeconds))
-            return;
+        switch (StepTowards(unit, PathGoal.Adjacent(site.Origin, site.Stats.Size), deltaSeconds))
+        {
+            case MoveOutcome.Moving:
+                return;
+
+            case MoveOutcome.GaveUp:
+                unit.GiveOrder(UnitOrder.Idle.Instance);
+                return;
+        }
 
         if (site.AddBuildProgress(deltaSeconds))
             OnSiteFinished(unit, site);
@@ -265,8 +293,16 @@ public sealed class UnitUpdater
         // Survey from beside the spot if it cannot be stood on, so a reading over water still works.
         var goal = _state.Map.IsWalkable(order.Target) ? PathGoal.Exactly(order.Target) : PathGoal.Adjacent(order.Target);
 
-        if (!StepTowards(unit, goal, deltaSeconds))
-            return;
+        switch (StepTowards(unit, goal, deltaSeconds))
+        {
+            case MoveOutcome.Moving:
+                return;
+
+            case MoveOutcome.GaveUp:
+                // Unreachable ground stays unsurveyed; whoever gave the order can choose somewhere else.
+                unit.GiveOrder(UnitOrder.Idle.Instance);
+                return;
+        }
 
         var player = _state.PlayerAt(unit.OwnerIndex);
         var readings = player.Knowledge.Survey(_state.Map, order.Target, SurveyRadius);
@@ -361,36 +397,59 @@ public sealed class UnitUpdater
             unit.ClearPath();
         }
 
-        if (!StepTowards(unit, PathGoal.Adjacent(dropOff.Origin, dropOff.Stats.Size), deltaSeconds))
-            return;
+        switch (StepTowards(unit, PathGoal.Adjacent(dropOff.Origin, dropOff.Stats.Size), deltaSeconds))
+        {
+            case MoveOutcome.Moving:
+                return;
+
+            case MoveOutcome.GaveUp:
+                // This depot is cut off; forget it so the next update picks a different one.
+                unit.DeliveryTargetId = null;
+                unit.BlockedSeconds = 0f;
+                return;
+        }
 
         var (delivered, amount) = unit.TakeCarriedLoad();
         _state.PlayerAt(unit.OwnerIndex).Resources.Add(delivered, amount);
     }
 
+    /// <summary>What one step of movement achieved.</summary>
+    private enum MoveOutcome
+    {
+        /// <summary>Still on its way.</summary>
+        Moving,
+
+        /// <summary>Standing somewhere that satisfies the goal.</summary>
+        Arrived,
+
+        /// <summary>Spent long enough failing to get closer that the goal should be treated as unreachable.</summary>
+        GaveUp,
+    }
+
     /// <summary>
     /// Walks the unit towards <paramref name="goal"/>, pathing as needed.
     /// </summary>
-    /// <returns>True once the unit stands somewhere that satisfies the goal.</returns>
-    private bool StepTowards(Unit unit, PathGoal goal, float deltaSeconds)
+    private MoveOutcome StepTowards(Unit unit, PathGoal goal, float deltaSeconds)
     {
         if (goal.IsSatisfiedBy(unit.Tile))
         {
             unit.ClearPath();
-            return true;
+            unit.BlockedSeconds = 0f;
+
+            return MoveOutcome.Arrived;
         }
 
         if (unit.Path.Count == 0)
         {
             if (unit.RepathCooldown > 0f)
-                return false;
+                return Stall(unit, deltaSeconds);
 
             unit.RepathCooldown = RepathInterval;
             unit.SetPath(_state.Pathfinder.FindPath(unit.Tile, goal));
 
             // Nowhere to go: hold position rather than jittering against the obstruction.
             if (unit.Path.Count == 0)
-                return false;
+                return Stall(unit, deltaSeconds);
         }
 
         var waypoint = unit.Path[0];
@@ -399,7 +458,7 @@ public sealed class UnitUpdater
         if (!_state.Map.IsWalkable(waypoint) && waypoint != unit.Tile)
         {
             unit.ClearPath();
-            return false;
+            return Stall(unit, deltaSeconds);
         }
 
         var target = waypoint.Center;
@@ -410,16 +469,42 @@ public sealed class UnitUpdater
         var terrainCost = _state.Map.TileAt(waypoint).Terrain.MoveCost();
         var step = unit.Stats.MoveSpeed / MathF.Max(1f, terrainCost) * deltaSeconds;
 
+        // Real movement happened, so whatever was blocking the unit no longer is.
+        unit.BlockedSeconds = 0f;
+
         if (distance <= MathF.Max(step, WaypointReachedDistance))
         {
             unit.Position = target;
             unit.AdvancePath();
 
-            return goal.IsSatisfiedBy(unit.Tile);
+            return goal.IsSatisfiedBy(unit.Tile) ? MoveOutcome.Arrived : MoveOutcome.Moving;
         }
 
         unit.Position += toTarget.Normalized() * step;
-        return false;
+        return MoveOutcome.Moving;
+    }
+
+    /// <summary>
+    /// Counts time spent going nowhere, and reports failure once it has gone on long enough.
+    /// </summary>
+    /// <remarks>
+    /// A moment of this is normal - a doorway is briefly crowded, a route needs rebuilding after a
+    /// building went up. Seconds of it means the goal cannot be reached at all, and the order has to end
+    /// or the unit stands there for the rest of the match.
+    /// </remarks>
+    private static MoveOutcome Stall(Unit unit, float deltaSeconds)
+    {
+        unit.BlockedSeconds += deltaSeconds;
+
+        return unit.BlockedSeconds >= GiveUpSeconds ? MoveOutcome.GaveUp : MoveOutcome.Moving;
+    }
+
+    /// <summary>Sends a woodcutter to a different stand, avoiding the one it could not get to.</summary>
+    private void RetargetWood(Unit unit, GridPos unreachable)
+    {
+        var replacement = _state.FindNearestTrees(unit.Tile, skip: new HashSet<GridPos> { unreachable });
+
+        unit.GiveOrder(replacement is null ? UnitOrder.Idle.Instance : new UnitOrder.GatherWood(replacement.Value));
     }
 
     private Unit? FindNearestEnemyUnitInVision(Unit unit)

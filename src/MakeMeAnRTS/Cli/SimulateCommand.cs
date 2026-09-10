@@ -1,5 +1,7 @@
+using MakeMeAnRTS.Features.Ai;
 using MakeMeAnRTS.Features.Match;
 using MakeMeAnRTS.Features.Units;
+using MakeMeAnRTS.Features.World;
 using MakeMeAnRTS.Features.World.Generation;
 
 namespace MakeMeAnRTS.Cli;
@@ -30,8 +32,17 @@ public static class SimulateCommand
         var reportInterval = args.Float("report", 60f);
         var verbose = args.HasFlag("verbose");
 
+        // Letting the CPU play both sides turns this into a full self-play match, which is the fastest
+        // way to find out whether the opponent can actually win a game rather than just gather wood.
+        var cpuPlaysEveryone = args.HasFlag("cpu-vs-cpu");
+
         var state = MatchSetup.Create(settings);
         var runner = new MatchRunner(state);
+
+        var commanders = state.Players
+            .Where(player => cpuPlaysEveryone || !player.IsHuman)
+            .Select(player => new CpuCommander(state, player.Index, CpuPlan.Standard, seed: settings.Seed + player.Index))
+            .ToList();
 
         Console.WriteLine($"Simulating seed {state.Map.Seed} for {totalSeconds:0}s of match time.");
         Report(state, verbose);
@@ -40,6 +51,9 @@ public static class SimulateCommand
 
         while (state.ElapsedSeconds < totalSeconds && !state.IsOver)
         {
+            foreach (var commander in commanders)
+                commander.Update(StepSeconds);
+
             runner.Update(StepSeconds);
 
             if (state.ElapsedSeconds < nextReport)
@@ -68,7 +82,7 @@ public static class SimulateCommand
                 .Select(entry => $"{entry.count}x{UnitCatalog.For(entry.kind).DisplayName}"));
 
             var buildings = string.Join(" ", state.BuildingsOf(player.Index)
-                .GroupBy(building => building.Kind)
+                .GroupBy(building => building.MinedMineral is { } mineral ? $"{building.Kind}({mineral})" : building.Kind.ToString())
                 .Select(group => $"{group.Count()}x{group.Key}{(group.Any(b => !b.IsComplete) ? "*" : "")}"));
 
             var stock = string.Join(" ", Resources.All.Select(resource => $"{resource.DisplayName()}={player.Resources[resource]}"));
@@ -87,6 +101,13 @@ public static class SimulateCommand
             Console.WriteLine($"       units: {units.Count} ({byKind})");
             Console.WriteLine($"       orders: {orders}; carrying {carrying}; without a route {pathless}");
             Console.WriteLine($"       buildings: {(string.IsNullOrEmpty(buildings) ? "none" : buildings)}");
+
+            // What the prospector has actually turned up, which is what limits where mines can go.
+            var surveyed = state.Map.Tiles.Positions().Count(pos => player.Knowledge.IsSurveyed(pos));
+            var richest = string.Join(" ", Minerals.All.Select(mineral =>
+                $"{mineral}<={state.Map.Tiles.Positions().Max(pos => (int)player.Knowledge.KnownAbundance(mineral, pos))}"));
+
+            Console.WriteLine($"       surveyed: {surveyed} tiles; best known {richest}");
 
             if (!verbose)
                 continue;

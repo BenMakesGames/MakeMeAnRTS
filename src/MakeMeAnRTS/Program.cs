@@ -24,6 +24,8 @@ const string Usage = """
         --seed N                 Map seed.
         --seconds N              How much match time to simulate.
         --report N               Seconds between reports.
+        --cpu-vs-cpu             Let the CPU play both sides, for a full self-play match.
+        --verbose                List every unit's tile, order and load in each report.
 
       font-sample                Render the built-in font's charset to an image.
         --out PATH               Output .bmp path.

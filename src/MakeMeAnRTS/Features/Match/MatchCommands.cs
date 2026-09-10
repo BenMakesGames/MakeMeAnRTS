@@ -93,13 +93,19 @@ public sealed class MatchCommands
     /// Places a foundation and puts the given builders to work on it.
     /// </summary>
     /// <param name="failureReason">Why the placement was refused, for the HUD to show. Null on success.</param>
+    /// <param name="preferredMineral">
+    /// Which mineral a mine should work, when the ground under it bears more than one. Ignored if the
+    /// player has not surveyed any of it there. Null takes the richest known - what a player clicking a
+    /// spot would expect - but a caller with a shortage to fix can ask for the one it needs instead.
+    /// </param>
     public bool TryPlaceBuilding(
         int playerIndex,
         BuildingKind kind,
         GridPos origin,
         IEnumerable<Unit> builders,
         out string? failureReason,
-        out Building? placed)
+        out Building? placed,
+        MineralKind? preferredMineral = null)
     {
         ArgumentNullException.ThrowIfNull(builders);
 
@@ -117,7 +123,9 @@ public sealed class MatchCommands
 
         if (stats.RequiresMineral)
         {
-            mineral = BestKnownMineral(player, origin, stats.Size);
+            mineral = preferredMineral is { } wanted && KnownAbundanceUnder(player, origin, stats.Size, wanted) > 0
+                ? wanted
+                : BestKnownMineral(player, origin, stats.Size);
 
             // The prospector's whole job: unsurveyed ground cannot be mined, even if it is rich.
             if (mineral is null)
@@ -169,6 +177,26 @@ public sealed class MatchCommands
                     best = mineral;
                     bestAbundance = abundance;
                 }
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>The most of <paramref name="mineral"/> the player knows about under a footprint.</summary>
+    public int KnownAbundanceUnder(Player player, GridPos origin, int size, MineralKind mineral)
+    {
+        ArgumentNullException.ThrowIfNull(player);
+
+        var best = 0;
+
+        for (var dy = 0; dy < size; dy++)
+        {
+            for (var dx = 0; dx < size; dx++)
+            {
+                var tile = new GridPos(origin.X + dx, origin.Y + dy);
+                if (player.Knowledge.IsSurveyed(tile))
+                    best = Math.Max(best, player.Knowledge.KnownAbundance(mineral, tile));
             }
         }
 

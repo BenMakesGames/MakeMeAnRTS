@@ -138,6 +138,28 @@ public sealed class MatchState
     }
 
     /// <summary>
+    /// Whether a mine has taken everything its footprint had.
+    /// </summary>
+    /// <remarks>
+    /// A mine only draws from the tiles it stands on, so deposits are finite and mines genuinely run
+    /// out. Anything deciding where to send workers or what to build next has to know the difference
+    /// between a mine and a monument to one.
+    /// </remarks>
+    public bool IsMineExhausted(Building mine)
+    {
+        ArgumentNullException.ThrowIfNull(mine);
+
+        if (mine.MinedMineral is not { } mineral)
+            return false;
+
+        foreach (var tile in mine.FootprintTiles())
+            if (Map.MineralAt(mineral, tile) > 0)
+                return false;
+
+        return true;
+    }
+
+    /// <summary>
     /// The nearest completed building of <paramref name="ownerIndex"/> that accepts <paramref name="resource"/>.
     /// </summary>
     /// <remarks>
