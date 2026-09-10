@@ -45,11 +45,15 @@ public static class ScreenshotCommand
 
         // The human seat has nobody at it here, so give it a CPU too; otherwise the picture is of four
         // citizens chopping wood forever while the opponent builds an empire, which shows nothing.
+        //
+        // Seeded exactly as the simulate command seeds it, so the same map plays out the same way in
+        // both tools. Without that, "simulate says the match ends at 2743s" tells you nothing about what
+        // a screenshot at 2800s will contain.
         var commanders = args.HasFlag("no-autoplay")
             ? []
             : screen.State.Players
                 .Where(player => player.IsHuman)
-                .Select(player => new CpuCommander(screen.State, player.Index, CpuPlan.Standard, seed: settings.Seed + 500))
+                .Select(player => new CpuCommander(screen.State, player.Index, CpuPlan.Standard, seed: settings.Seed + player.Index))
                 .ToList();
 
         var steps = (int)(fastForward / StepSeconds);

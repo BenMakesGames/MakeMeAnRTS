@@ -75,7 +75,7 @@ public sealed class AudioDevice : IDisposable
                 specHandle,
                 fDeleteOld: false);
 
-            var sound = Mixer.LoadRawAudio(_mixer, buffer, (UIntPtr)bytes, ref specHandle);
+            var sound = Mixer.LoadRawAudio(_mixer, buffer, (UIntPtr)bytes, in specHandle);
             if (sound != IntPtr.Zero)
                 _sounds.Add(sound);
 

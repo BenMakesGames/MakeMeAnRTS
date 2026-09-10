@@ -39,7 +39,7 @@ public static class BenchmarkCommand
 
         var commanders = screen.State.Players
             .Where(player => player.IsHuman)
-            .Select(player => new CpuCommander(screen.State, player.Index, CpuPlan.Standard, seed: settings.Seed + 500))
+            .Select(player => new CpuCommander(screen.State, player.Index, CpuPlan.Standard, seed: settings.Seed + player.Index))
             .ToList();
 
         var input = new InputState();
