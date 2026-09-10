@@ -44,8 +44,13 @@ public static class SimulateCommand
             .Select(player => new CpuCommander(state, player.Index, CpuPlan.Standard, seed: settings.Seed + player.Index))
             .ToList();
 
+        var commandersByPlayer = state.Players
+            .Where(player => cpuPlaysEveryone || !player.IsHuman)
+            .Select((player, index) => (player.Index, Commander: commanders[index]))
+            .ToDictionary(entry => entry.Index, entry => entry.Commander);
+
         Console.WriteLine($"Simulating seed {state.Map.Seed} for {totalSeconds:0}s of match time.");
-        Report(state, verbose);
+        Report(state, verbose, commandersByPlayer);
 
         var nextReport = reportInterval;
 
@@ -59,7 +64,7 @@ public static class SimulateCommand
             if (state.ElapsedSeconds < nextReport)
                 continue;
 
-            Report(state, verbose);
+            Report(state, verbose, commandersByPlayer);
             nextReport += reportInterval;
         }
 
@@ -69,7 +74,7 @@ public static class SimulateCommand
         return 0;
     }
 
-    private static void Report(MatchState state, bool verbose)
+    private static void Report(MatchState state, bool verbose, IReadOnlyDictionary<int, CpuCommander> commanders)
     {
         Console.WriteLine($"--- t={state.ElapsedSeconds,6:0}s ---");
 
@@ -107,7 +112,11 @@ public static class SimulateCommand
             var richest = string.Join(" ", Minerals.All.Select(mineral =>
                 $"{mineral}<={state.Map.Tiles.Positions().Max(pos => (int)player.Knowledge.KnownAbundance(mineral, pos))}"));
 
-            Console.WriteLine($"       surveyed: {surveyed} tiles; best known {richest}");
+            var surveys = state.Signs.Count(sign => sign.OwnerIndex == player.Index);
+            Console.WriteLine($"       surveyed: {surveyed} tiles over {surveys} surveys; best known {richest}");
+
+            if (commanders.TryGetValue(player.Index, out var commander))
+                Console.WriteLine($"       ai: {commander.Status()}");
 
             if (!verbose)
                 continue;

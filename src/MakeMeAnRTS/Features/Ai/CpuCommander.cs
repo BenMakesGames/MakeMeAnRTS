@@ -71,6 +71,30 @@ public sealed class CpuCommander
 
     private Player Player => _state.PlayerAt(_playerIndex);
 
+    /// <summary>
+    /// A one-line summary of what this commander currently believes and intends.
+    /// </summary>
+    /// <remarks>
+    /// Diagnostics for the simulate command. An opponent that quietly does nothing looks identical to
+    /// one that is biding its time; this says which, and it is how the "army of 76 that never attacked"
+    /// stalemate was tracked down.
+    /// </remarks>
+    public string Status()
+    {
+        var army = _state.UnitsOf(_playerIndex).Count(unit => unit.Stats.CanFight && unit.Kind is not UnitKind.Citizen and not UnitKind.Scout);
+        var knownEnemy = FindKnownEnemyBuilding();
+
+        var intent = knownEnemy is not null
+            ? $"assaulting {knownEnemy.Stats.DisplayName} at {knownEnemy.Origin}"
+            : _lastEnemyContact is { } contact
+                ? $"pushing towards last contact {contact}"
+                : _armyRally is { } rally
+                    ? $"searching, heading for {rally}"
+                    : "searching, nowhere left to look";
+
+        return $"army {army}/{_plan.AttackArmySize} {(_isAttacking ? "committed" : "massing")}; wants {NextBuildingWanted()?.ToString() ?? "nothing"}; {intent}";
+    }
+
     public void Update(float deltaSeconds)
     {
         if (_state.IsOver || Player.IsDefeated)
@@ -503,9 +527,9 @@ public sealed class CpuCommander
         return null;
     }
 
-    private bool IsGoodSite(GridPos origin, int size)
+    private bool IsGoodSite(GridPos origin, int size, bool allowRockyGround = false)
     {
-        if (!_state.Map.IsFootprintBuildable(origin, size))
+        if (!_state.Map.IsFootprintBuildable(origin, size, allowRockyGround))
             return false;
 
         // A building nobody can walk up to is worse than no building at all.
@@ -535,7 +559,7 @@ public sealed class CpuCommander
 
         foreach (var pos in _state.Map.Tiles.Positions())
         {
-            if (!Player.Knowledge.IsSurveyed(pos) || !IsGoodSite(pos, size))
+            if (!Player.Knowledge.IsSurveyed(pos) || !IsGoodSite(pos, size, allowRockyGround: true))
                 continue;
 
             // A long walk costs a mine most of its value, however rich it is.

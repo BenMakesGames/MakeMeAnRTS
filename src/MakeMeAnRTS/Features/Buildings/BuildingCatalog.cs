@@ -44,6 +44,7 @@ public static class BuildingCatalog
             VisionRadius = 5,
             MaxWorkers = 4,
             RequiresMineral = true,
+            AllowsRockyGround = true,
             BuildHotkey = 'M',
         },
         [BuildingKind.Barracks] = new BuildingStats

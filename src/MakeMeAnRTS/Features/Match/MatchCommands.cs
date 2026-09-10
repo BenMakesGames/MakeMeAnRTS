@@ -113,7 +113,7 @@ public sealed class MatchCommands
         var stats = BuildingCatalog.For(kind);
         var player = _state.PlayerAt(playerIndex);
 
-        if (!_state.Map.IsFootprintBuildable(origin, stats.Size))
+        if (!_state.Map.IsFootprintBuildable(origin, stats.Size, stats.AllowsRockyGround))
         {
             failureReason = "Cannot build there.";
             return false;

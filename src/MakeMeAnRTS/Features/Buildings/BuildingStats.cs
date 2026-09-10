@@ -28,6 +28,12 @@ public sealed record BuildingStats
     /// <summary>Must be placed on ground bearing the mineral it extracts.</summary>
     public bool RequiresMineral { get; init; }
 
+    /// <summary>
+    /// May be built on bare rock, which nothing else can. Mines only, and they need it: minerals favour
+    /// high ground and high ground is rock.
+    /// </summary>
+    public bool AllowsRockyGround { get; init; }
+
     /// <summary>Hotkey shown in the build menu and accepted while a builder is selected.</summary>
     public required char BuildHotkey { get; init; }
 

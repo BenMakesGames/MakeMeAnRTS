@@ -128,9 +128,8 @@ public sealed class UnitUpdater
             return;
         }
 
-        // Logged out, or walled in by its own wood and impossible to stand beside: either way, move on
-        // to the nearest trees that can actually be cut rather than waiting on a tile forever.
-        if (!_state.Map.IsCuttable(order.Tree))
+        // Logged out: move on to the nearest remaining trees rather than waiting on a bare tile forever.
+        if (!_state.Map.TileAt(order.Tree).HasTrees)
         {
             var nextStand = _state.FindNearestTrees(order.Tree);
 
@@ -311,8 +310,15 @@ public sealed class UnitUpdater
         unit.GiveOrder(UnitOrder.Idle.Instance);
     }
 
-    /// <summary>Tiles a single survey uncovers around the prospector.</summary>
-    public const int SurveyRadius = 7;
+    /// <summary>
+    /// Radius of ground a single survey reads.
+    /// </summary>
+    /// <remarks>
+    /// Sized so that surveying a map is a real task but not a career: at radius 7 a lone prospector read
+    /// about 400 tiles of a 30,000-tile map in twenty-five minutes, which left both sides unable to find
+    /// anything worth mining.
+    /// </remarks>
+    public const int SurveyRadius = 10;
 
     private void UpdateAttackUnit(Unit unit, UnitOrder.AttackUnit order, float deltaSeconds)
     {
@@ -466,8 +472,7 @@ public sealed class UnitUpdater
         var distance = toTarget.Length;
 
         // Rough ground costs more to cross, using the same numbers pathfinding used to choose this route.
-        var terrainCost = _state.Map.TileAt(waypoint).Terrain.MoveCost();
-        var step = unit.Stats.MoveSpeed / MathF.Max(1f, terrainCost) * deltaSeconds;
+        var step = unit.Stats.MoveSpeed / MathF.Max(1f, _state.Map.TileAt(waypoint).MoveCost) * deltaSeconds;
 
         // Real movement happened, so whatever was blocking the unit no longer is.
         unit.BlockedSeconds = 0f;

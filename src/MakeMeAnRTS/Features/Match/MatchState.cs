@@ -188,13 +188,9 @@ public sealed class MatchState
     }
 
     /// <summary>
-    /// The nearest tile of trees that can actually be cut, searched outwards in rings.
+    /// The nearest tile with trees on it, searched outwards in rings.
     /// </summary>
     /// <param name="skip">Tiles already claimed by other workers, so a group spreads over a wood.</param>
-    /// <remarks>
-    /// Only <see cref="WorldMap.IsCuttable"/> tiles count. Returning a tree buried inside a wood would
-    /// send a worker to stand on a tile that no route can reach, and it would wait there forever.
-    /// </remarks>
     public GridPos? FindNearestTrees(GridPos near, int maxRadius = 30, IReadOnlySet<GridPos>? skip = null)
     {
         for (var radius = 0; radius <= maxRadius; radius++)
@@ -207,7 +203,7 @@ public sealed class MatchState
                         continue;
 
                     var candidate = new GridPos(near.X + dx, near.Y + dy);
-                    if (Map.IsCuttable(candidate) && skip?.Contains(candidate) != true)
+                    if (Map.IsInBounds(candidate) && Map.TileAt(candidate).HasTrees && skip?.Contains(candidate) != true)
                         return candidate;
                 }
             }

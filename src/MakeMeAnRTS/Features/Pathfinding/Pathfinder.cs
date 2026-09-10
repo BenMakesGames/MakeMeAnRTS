@@ -48,14 +48,11 @@ public sealed class Pathfinder
     /// <summary>
     /// Finds a walkable route from <paramref name="start"/> to <paramref name="goal"/>.
     /// </summary>
-    /// <param name="ignoreTrees">
-    /// True to path through woods as though they were clear, for callers who intend to cut their way in.
-    /// </param>
     /// <returns>
     /// Tiles to walk, excluding the start. Empty if the unit is already there, or if nowhere better than
     /// the start could be reached.
     /// </returns>
-    public List<GridPos> FindPath(GridPos start, PathGoal goal, bool ignoreTrees = false)
+    public List<GridPos> FindPath(GridPos start, PathGoal goal)
     {
         if (!_map.IsInBounds(start))
             throw new ArgumentOutOfRangeException(nameof(start), start, "Path start is off the map.");
@@ -89,20 +86,20 @@ public sealed class Pathfinder
             foreach (var offset in GridPos.Neighbors8)
             {
                 var neighbor = current + offset;
-                if (!IsEnterable(neighbor, ignoreTrees))
+                if (!IsEnterable(neighbor))
                     continue;
 
                 var isDiagonal = offset.X != 0 && offset.Y != 0;
 
                 // No squeezing between two blocked tiles: units would visibly clip through corners.
                 if (isDiagonal &&
-                    (!IsEnterable(new GridPos(current.X + offset.X, current.Y), ignoreTrees) ||
-                     !IsEnterable(new GridPos(current.X, current.Y + offset.Y), ignoreTrees)))
+                    (!IsEnterable(new GridPos(current.X + offset.X, current.Y)) ||
+                     !IsEnterable(new GridPos(current.X, current.Y + offset.Y))))
                 {
                     continue;
                 }
 
-                var stepCost = _map.TileAt(neighbor).Terrain.MoveCost() * (isDiagonal ? DiagonalCost : 1f);
+                var stepCost = _map.TileAt(neighbor).MoveCost * (isDiagonal ? DiagonalCost : 1f);
                 var tentativeCost = _costFromStart[currentIndex] + stepCost;
                 var neighborIndex = Index(neighbor);
 
@@ -128,10 +125,6 @@ public sealed class Pathfinder
 
         return closestIndex == startIndex ? [] : Reconstruct(closestIndex);
     }
-
-    /// <summary>Whether a route exists at all, without the caller paying to build the path.</summary>
-    public bool CanReach(GridPos start, PathGoal goal, bool ignoreTrees = false)
-        => goal.IsSatisfiedBy(start) || FindPath(start, goal, ignoreTrees) is { Count: > 0 } path && goal.IsSatisfiedBy(path[^1]);
 
     /// <summary>
     /// The nearest walkable tile to <paramref name="near"/>, searched outwards in rings.
@@ -165,15 +158,7 @@ public sealed class Pathfinder
         return null;
     }
 
-    private bool IsEnterable(GridPos pos, bool ignoreTrees)
-    {
-        if (!_map.IsInBounds(pos) || _map.IsOccupied(pos))
-            return false;
-
-        var tile = _map.TileAt(pos);
-
-        return ignoreTrees ? tile.Terrain.IsWalkable() : tile.IsWalkable;
-    }
+    private bool IsEnterable(GridPos pos) => _map.IsWalkable(pos);
 
     /// <summary>Octile distance: exact for an empty grid, so it never overestimates and A* stays optimal.</summary>
     private static float Heuristic(GridPos from, PathGoal goal)

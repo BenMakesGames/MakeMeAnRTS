@@ -119,37 +119,34 @@ public sealed class WorldMap
     public bool IsWalkable(GridPos pos) => IsInBounds(pos) && Tiles[pos].IsWalkable && !_occupied[pos];
 
     /// <summary>
-    /// Whether a tile's trees can actually be felled: it has trees, and something can stand beside it.
+    /// Whether a building footprint tile is free. Excludes trees, water, rock and other buildings.
     /// </summary>
-    /// <remarks>
-    /// Trees block movement, so a tile in the middle of a wood is walled in by its own neighbours and
-    /// cannot be reached to cut. Woods therefore have to be eaten from the outside in, and any code
-    /// choosing a tree to chop has to respect that or it will send workers to stand somewhere that does
-    /// not exist.
-    /// </remarks>
-    public bool IsCuttable(GridPos pos)
+    /// <param name="allowRockyGround">
+    /// True for mines, which are the one thing that belongs on bare rock. Without this, the richest ore
+    /// on the map is unusable: minerals favour high ground, high ground is rock, and rock takes no
+    /// buildings - so a player could survey a huge seam and have nowhere to put a mine.
+    /// </param>
+    public bool IsBuildable(GridPos pos, bool allowRockyGround = false)
     {
-        if (!IsInBounds(pos) || !Tiles[pos].HasTrees)
+        if (!IsInBounds(pos) || _occupied[pos])
             return false;
 
-        foreach (var offset in GridPos.Neighbors8)
-            if (IsWalkable(pos + offset))
-                return true;
+        var tile = Tiles[pos];
 
-        return false;
+        if (tile.HasTrees)
+            return false;
+
+        return tile.Terrain.IsBuildable() || (allowRockyGround && tile.Terrain == TerrainKind.Rock);
     }
 
-    /// <summary>Whether a building footprint tile is free. Excludes trees, water, rock and other buildings.</summary>
-    public bool IsBuildable(GridPos pos) => IsInBounds(pos) && Tiles[pos].IsBuildable && !_occupied[pos];
-
     /// <summary>Whether an entire <paramref name="size"/>-square footprint with its top-left at <paramref name="origin"/> is free.</summary>
-    public bool IsFootprintBuildable(GridPos origin, int size)
+    public bool IsFootprintBuildable(GridPos origin, int size, bool allowRockyGround = false)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(size, 1);
 
         for (var dy = 0; dy < size; dy++)
             for (var dx = 0; dx < size; dx++)
-                if (!IsBuildable(new GridPos(origin.X + dx, origin.Y + dy)))
+                if (!IsBuildable(new GridPos(origin.X + dx, origin.Y + dy), allowRockyGround))
                     return false;
 
         return true;

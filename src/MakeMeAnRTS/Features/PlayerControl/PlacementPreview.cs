@@ -40,7 +40,7 @@ public sealed class PlacementPreview
 
         var stats = BuildingCatalog.For(Kind);
 
-        if (!state.Map.IsFootprintBuildable(Origin, Size))
+        if (!state.Map.IsFootprintBuildable(Origin, Size, stats.AllowsRockyGround))
         {
             (IsValid, Problem) = (false, "Blocked ground.");
             return;
