@@ -38,8 +38,10 @@ public static class ScreenshotCommand
         using var platform = Platform.Create("MakeMeAnRTS", windowWidth, windowHeight, PlatformMode.Offscreen);
         using var font = BitmapFont.Create(platform.Renderer);
 
+        using var audio = AudioDevice.Open();
+
         var renderer = new Renderer2D(platform.Renderer, font);
-        var screen = new GameScreen(settings, windowWidth, windowHeight) { RevealEverything = args.HasFlag("reveal") };
+        var screen = new GameScreen(settings, windowWidth, windowHeight, audio) { RevealEverything = args.HasFlag("reveal") };
 
         // The human seat has nobody at it here, so give it a CPU too; otherwise the picture is of four
         // citizens chopping wood forever while the opponent builds an empire, which shows nothing.

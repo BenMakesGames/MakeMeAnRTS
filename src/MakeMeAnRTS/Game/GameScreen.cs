@@ -1,6 +1,7 @@
 using SDL3;
 using MakeMeAnRTS.Engine;
 using MakeMeAnRTS.Features.Ai;
+using MakeMeAnRTS.Features.Audio;
 using MakeMeAnRTS.Features.Buildings;
 using MakeMeAnRTS.Features.Camera;
 using MakeMeAnRTS.Features.Debug;
@@ -43,8 +44,10 @@ public sealed class GameScreen
     private readonly SelectionRenderer _selectionRenderer;
     private readonly HudRenderer _hudRenderer;
     private readonly DebugOverlay _debugOverlay;
+    private readonly SoundBoard _sound;
 
     private HudLayout _layout;
+    private int _lastMessageRevision;
 
     public MatchState State => _state;
     public Camera2D Camera => _camera;
@@ -53,9 +56,10 @@ public sealed class GameScreen
     /// <summary>Reveals the whole map. For the debug overlay and for looking at a finished match.</summary>
     public bool RevealEverything { get; set; }
 
-    public GameScreen(WorldGenSettings worldSettings, int windowWidth, int windowHeight)
+    public GameScreen(WorldGenSettings worldSettings, int windowWidth, int windowHeight, AudioDevice audio)
     {
         ArgumentNullException.ThrowIfNull(worldSettings);
+        ArgumentNullException.ThrowIfNull(audio);
 
         _state = MatchSetup.Create(worldSettings);
         _runner = new MatchRunner(_state);
@@ -76,6 +80,7 @@ public sealed class GameScreen
         _selectionRenderer = new SelectionRenderer(_state);
         _hudRenderer = new HudRenderer(_state, _worldRenderer, HumanPlayerIndex);
         _debugOverlay = new DebugOverlay(_state);
+        _sound = new SoundBoard(audio, _state, HumanPlayerIndex);
 
         StartLookingAtHome();
     }
@@ -99,6 +104,17 @@ public sealed class GameScreen
             opponent.Update(deltaSeconds);
 
         _runner.Update(deltaSeconds);
+
+        // Sound reads the match after it has been stepped, so it reacts to this frame's state.
+        _sound.Update(deltaSeconds);
+
+        if (_controller.MessageRevision != _lastMessageRevision)
+        {
+            _lastMessageRevision = _controller.MessageRevision;
+
+            if (_controller.MessageIsProblem)
+                _sound.Play(GameSound.Denied);
+        }
     }
 
     public void Draw(Renderer2D renderer)

@@ -49,6 +49,12 @@ public sealed class PlayerController
 
     public float MessageAgeSeconds { get; private set; }
 
+    /// <summary>Whether the current message reports a refusal rather than just confirming something.</summary>
+    public bool MessageIsProblem { get; private set; }
+
+    /// <summary>Bumped whenever a new message is raised, so anything watching can tell them apart.</summary>
+    public int MessageRevision { get; private set; }
+
     public PlayerController(MatchState state, Camera2D camera, int playerIndex)
     {
         ArgumentNullException.ThrowIfNull(state);
@@ -298,7 +304,9 @@ public sealed class PlayerController
             _ => null,
         };
 
-        Raise(MineralOverlay is { } mineral ? $"{mineral.DisplayName()} heat map (surveyed ground only)" : "Heat map off");
+        Raise(
+            MineralOverlay is { } mineral ? $"{mineral.DisplayName()} heat map (surveyed ground only)" : "Heat map off",
+            isProblem: false);
     }
 
     private void CenterOnHome()
@@ -335,10 +343,15 @@ public sealed class PlayerController
             .MinBy(unit => unit.OwnerIndex == _playerIndex ? 0 : 1);
     }
 
-    public void Raise(string message)
+    /// <param name="isProblem">
+    /// False for a message that merely confirms something, so a toggle does not sound like a refusal.
+    /// </param>
+    public void Raise(string message, bool isProblem = true)
     {
         Message = message;
         MessageAgeSeconds = 0f;
+        MessageIsProblem = isProblem;
+        MessageRevision++;
     }
 
     /// <summary>Maps a build hotkey letter to its scancode. Only A-Z are used.</summary>

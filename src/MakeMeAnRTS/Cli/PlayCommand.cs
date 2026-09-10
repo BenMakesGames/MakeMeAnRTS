@@ -25,8 +25,13 @@ public static class PlayCommand
         using var platform = Platform.Create("MakeMeAnRTS", windowWidth, windowHeight, PlatformMode.Windowed);
         using var font = BitmapFont.Create(platform.Renderer);
 
+        using var audio = AudioDevice.Open();
+
         var renderer = new Renderer2D(platform.Renderer, font);
-        var screen = new GameScreen(settings, windowWidth, windowHeight);
+        var screen = new GameScreen(settings, windowWidth, windowHeight, audio);
+
+        if (!audio.IsAvailable)
+            Console.WriteLine("No audio device available; playing without sound.");
 
         Console.WriteLine($"Map seed {screen.State.Map.Seed}. Replay it with: play --seed {screen.State.Map.Seed}");
 

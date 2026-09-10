@@ -397,14 +397,47 @@ public sealed class CpuCommander
 
         _armyRally = null;
 
-        foreach (var soldier in army.Where(unit => unit.Order is UnitOrder.Idle))
-            soldier.GiveOrder(new UnitOrder.AttackBuilding(target.Id));
-
-        EngageNearbyEnemies(army);
+        PressAssault(army, target);
 
         // Back below half strength: stop feeding units in and rebuild before trying again.
         if (army.Count < _plan.AttackArmySize / 2)
             _isAttacking = false;
+    }
+
+    /// <summary>
+    /// Drives the whole army at one building, pulling units off anything that is merely distracting them.
+    /// </summary>
+    /// <remarks>
+    /// Ordering only the idle units was not enough. Soldiers latch onto whatever enemy wanders past and
+    /// chase it, so two armies would criss-cross the map trading pursuits and neither would ever reach a
+    /// base - self-play produced armies of over 150 on both sides with no winner after an hour. A unit
+    /// already swinging at something next to it is left alone, because breaking off a fight you are in
+    /// the middle of is worse than finishing it.
+    /// </remarks>
+    private void PressAssault(IReadOnlyList<Unit> army, Building target)
+    {
+        foreach (var soldier in army)
+        {
+            // Already on the objective: nothing to do.
+            if (soldier.Order is UnitOrder.AttackBuilding attack && attack.TargetBuildingId == target.Id)
+                continue;
+
+            if (IsInMelee(soldier))
+                continue;
+
+            soldier.GiveOrder(new UnitOrder.AttackBuilding(target.Id));
+        }
+    }
+
+    /// <summary>Whether a unit is close enough to an enemy that pulling it away would waste the exchange.</summary>
+    private bool IsInMelee(Unit soldier)
+    {
+        if (soldier.Order is not UnitOrder.AttackUnit attack)
+            return false;
+
+        var enemy = _state.FindUnit(attack.TargetUnitId);
+
+        return enemy is { IsAlive: true } && Vec2.Distance(enemy.Position, soldier.Position) <= soldier.Stats.AttackRange + 1.5f;
     }
 
     /// <summary>
