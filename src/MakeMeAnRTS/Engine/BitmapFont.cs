@@ -1,0 +1,242 @@
+using SDL3;
+
+namespace MakeMeAnRTS.Engine;
+
+/// <summary>
+/// A 5x7 pixel font baked into a single-row texture atlas at startup.
+/// </summary>
+/// <remarks>
+/// The game ships no asset files, so glyphs live in code as column bitmasks: one byte per column,
+/// bit 0 = top row. Drawing is one <c>RenderTexture</c> per glyph tinted by colour modulation.
+/// Run <c>--font-sample</c> to render the whole charset to a BMP and eyeball it.
+/// </remarks>
+public sealed class BitmapFont : IDisposable
+{
+    public const int GlyphWidth = 5;
+    public const int GlyphHeight = 7;
+
+    /// <summary>One column of padding to the right of each glyph, so text needs no manual kerning.</summary>
+    public const int CellWidth = GlyphWidth + 1;
+
+    private const char FirstChar = ' ';
+    private const char LastChar = '~';
+
+    private readonly IntPtr _atlas;
+    private bool _disposed;
+
+    private BitmapFont(IntPtr atlas) => _atlas = atlas;
+
+    public static BitmapFont Create(IntPtr renderer)
+    {
+        const int glyphCount = LastChar - FirstChar + 1;
+        const int atlasWidth = glyphCount * CellWidth;
+        const int atlasHeight = GlyphHeight;
+
+        var pixels = new byte[atlasWidth * atlasHeight * 4];
+
+        for (var glyphIndex = 0; glyphIndex < glyphCount; glyphIndex++)
+        {
+            for (var column = 0; column < GlyphWidth; column++)
+            {
+                var mask = Glyphs[glyphIndex * GlyphWidth + column];
+
+                for (var row = 0; row < GlyphHeight; row++)
+                {
+                    if ((mask & (1 << row)) == 0)
+                        continue;
+
+                    var offset = (row * atlasWidth + glyphIndex * CellWidth + column) * 4;
+                    pixels[offset + 0] = 255;
+                    pixels[offset + 1] = 255;
+                    pixels[offset + 2] = 255;
+                    pixels[offset + 3] = 255;
+                }
+            }
+        }
+
+        var texture = SDL.CreateTexture(renderer, SDL.PixelFormat.ABGR8888, SDL.TextureAccess.Static, atlasWidth, atlasHeight);
+        if (texture == IntPtr.Zero)
+            throw new PlatformException($"Font atlas SDL_CreateTexture failed: {SDL.GetError()}");
+
+        if (!SDL.UpdateTexture(texture, IntPtr.Zero, pixels, atlasWidth * 4))
+        {
+            SDL.DestroyTexture(texture);
+            throw new PlatformException($"Font atlas SDL_UpdateTexture failed: {SDL.GetError()}");
+        }
+
+        // Nearest keeps glyph edges crisp when scaled up to integer sizes.
+        SDL.SetTextureScaleMode(texture, SDL.ScaleMode.Nearest);
+        SDL.SetTextureBlendMode(texture, SDL.BlendMode.Blend);
+
+        return new BitmapFont(texture);
+    }
+
+    /// <summary>Pixel width of <paramref name="text"/> at <paramref name="scale"/>, excluding the trailing gap.</summary>
+    public int MeasureWidth(string text, int scale = 1)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+
+        return text.Length == 0 ? 0 : (text.Length * CellWidth - 1) * scale;
+    }
+
+    public int LineHeight(int scale = 1) => GlyphHeight * scale;
+
+    /// <summary>
+    /// Draws <paramref name="text"/> with its top-left corner at (<paramref name="x"/>, <paramref name="y"/>).
+    /// Characters outside the printable ASCII range are drawn as '?' rather than throwing, because
+    /// text often comes from formatted game state and a stray glyph must not crash a frame.
+    /// </summary>
+    public void Draw(IntPtr renderer, string text, float x, float y, SDL.Color color, int scale = 1)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentOutOfRangeException.ThrowIfLessThan(scale, 1);
+
+        SDL.SetTextureColorMod(_atlas, color.R, color.G, color.B);
+        SDL.SetTextureAlphaMod(_atlas, color.A);
+
+        var penX = x;
+
+        foreach (var character in text)
+        {
+            if (character == ' ')
+            {
+                penX += CellWidth * scale;
+                continue;
+            }
+
+            var resolved = character is >= FirstChar and <= LastChar ? character : '?';
+            var source = new SDL.FRect
+            {
+                X = (resolved - FirstChar) * CellWidth,
+                Y = 0,
+                W = GlyphWidth,
+                H = GlyphHeight,
+            };
+            var destination = new SDL.FRect
+            {
+                X = penX,
+                Y = y,
+                W = GlyphWidth * scale,
+                H = GlyphHeight * scale,
+            };
+
+            SDL.RenderTexture(renderer, _atlas, in source, in destination);
+            penX += CellWidth * scale;
+        }
+    }
+
+    /// <summary>Draws text centred horizontally on <paramref name="centerX"/>.</summary>
+    public void DrawCentered(IntPtr renderer, string text, float centerX, float y, SDL.Color color, int scale = 1)
+        => Draw(renderer, text, centerX - MeasureWidth(text, scale) / 2f, y, color, scale);
+
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        _disposed = true;
+        SDL.DestroyTexture(_atlas);
+    }
+
+    /// <summary>
+    /// Five column bitmasks per glyph for ASCII 0x20..0x7E, in order. Bit 0 is the top pixel row.
+    /// </summary>
+    private static readonly byte[] Glyphs =
+    [
+        0x00, 0x00, 0x00, 0x00, 0x00, // (space)
+        0x00, 0x00, 0x5F, 0x00, 0x00, // !
+        0x00, 0x07, 0x00, 0x07, 0x00, // "
+        0x14, 0x7F, 0x14, 0x7F, 0x14, // #
+        0x24, 0x2A, 0x7F, 0x2A, 0x12, // $
+        0x23, 0x13, 0x08, 0x64, 0x62, // %
+        0x36, 0x49, 0x55, 0x22, 0x50, // &
+        0x00, 0x05, 0x03, 0x00, 0x00, // '
+        0x00, 0x1C, 0x22, 0x41, 0x00, // (
+        0x00, 0x41, 0x22, 0x1C, 0x00, // )
+        0x14, 0x08, 0x3E, 0x08, 0x14, // *
+        0x08, 0x08, 0x3E, 0x08, 0x08, // +
+        0x00, 0x50, 0x30, 0x00, 0x00, // ,
+        0x08, 0x08, 0x08, 0x08, 0x08, // -
+        0x00, 0x60, 0x60, 0x00, 0x00, // .
+        0x20, 0x10, 0x08, 0x04, 0x02, // /
+        0x3E, 0x51, 0x49, 0x45, 0x3E, // 0
+        0x00, 0x42, 0x7F, 0x40, 0x00, // 1
+        0x42, 0x61, 0x51, 0x49, 0x46, // 2
+        0x21, 0x41, 0x45, 0x4B, 0x31, // 3
+        0x18, 0x14, 0x12, 0x7F, 0x10, // 4
+        0x27, 0x45, 0x45, 0x45, 0x39, // 5
+        0x3C, 0x4A, 0x49, 0x49, 0x30, // 6
+        0x01, 0x71, 0x09, 0x05, 0x03, // 7
+        0x36, 0x49, 0x49, 0x49, 0x36, // 8
+        0x06, 0x49, 0x49, 0x29, 0x1E, // 9
+        0x00, 0x36, 0x36, 0x00, 0x00, // :
+        0x00, 0x56, 0x36, 0x00, 0x00, // ;
+        0x08, 0x14, 0x22, 0x41, 0x00, // <
+        0x14, 0x14, 0x14, 0x14, 0x14, // =
+        0x00, 0x41, 0x22, 0x14, 0x08, // >
+        0x02, 0x01, 0x51, 0x09, 0x06, // ?
+        0x32, 0x49, 0x79, 0x41, 0x3E, // @
+        0x7E, 0x11, 0x11, 0x11, 0x7E, // A
+        0x7F, 0x49, 0x49, 0x49, 0x36, // B
+        0x3E, 0x41, 0x41, 0x41, 0x22, // C
+        0x7F, 0x41, 0x41, 0x22, 0x1C, // D
+        0x7F, 0x49, 0x49, 0x49, 0x41, // E
+        0x7F, 0x09, 0x09, 0x01, 0x01, // F
+        0x3E, 0x41, 0x41, 0x51, 0x32, // G
+        0x7F, 0x08, 0x08, 0x08, 0x7F, // H
+        0x00, 0x41, 0x7F, 0x41, 0x00, // I
+        0x20, 0x40, 0x41, 0x3F, 0x01, // J
+        0x7F, 0x08, 0x14, 0x22, 0x41, // K
+        0x7F, 0x40, 0x40, 0x40, 0x40, // L
+        0x7F, 0x02, 0x04, 0x02, 0x7F, // M
+        0x7F, 0x04, 0x08, 0x10, 0x7F, // N
+        0x3E, 0x41, 0x41, 0x41, 0x3E, // O
+        0x7F, 0x09, 0x09, 0x09, 0x06, // P
+        0x3E, 0x41, 0x51, 0x21, 0x5E, // Q
+        0x7F, 0x09, 0x19, 0x29, 0x46, // R
+        0x26, 0x49, 0x49, 0x49, 0x32, // S
+        0x03, 0x01, 0x7F, 0x01, 0x03, // T
+        0x3F, 0x40, 0x40, 0x40, 0x3F, // U
+        0x1F, 0x20, 0x40, 0x20, 0x1F, // V
+        0x3F, 0x40, 0x38, 0x40, 0x3F, // W
+        0x63, 0x14, 0x08, 0x14, 0x63, // X
+        0x03, 0x04, 0x78, 0x04, 0x03, // Y
+        0x61, 0x51, 0x49, 0x45, 0x43, // Z
+        0x00, 0x00, 0x7F, 0x41, 0x41, // [
+        0x02, 0x04, 0x08, 0x10, 0x20, // \
+        0x41, 0x41, 0x7F, 0x00, 0x00, // ]
+        0x04, 0x02, 0x01, 0x02, 0x04, // ^
+        0x40, 0x40, 0x40, 0x40, 0x40, // _
+        0x00, 0x01, 0x02, 0x04, 0x00, // `
+        0x20, 0x54, 0x54, 0x54, 0x78, // a
+        0x7F, 0x48, 0x44, 0x44, 0x38, // b
+        0x38, 0x44, 0x44, 0x44, 0x20, // c
+        0x38, 0x44, 0x44, 0x48, 0x7F, // d
+        0x38, 0x54, 0x54, 0x54, 0x24, // e
+        0x08, 0x7E, 0x09, 0x01, 0x02, // f
+        0x08, 0x14, 0x54, 0x54, 0x3C, // g
+        0x7F, 0x08, 0x04, 0x04, 0x78, // h
+        0x00, 0x44, 0x7D, 0x40, 0x00, // i
+        0x20, 0x40, 0x44, 0x3D, 0x00, // j
+        0x00, 0x7F, 0x10, 0x28, 0x44, // k
+        0x00, 0x41, 0x7F, 0x40, 0x00, // l
+        0x7C, 0x04, 0x18, 0x04, 0x78, // m
+        0x7C, 0x08, 0x04, 0x04, 0x78, // n
+        0x38, 0x44, 0x44, 0x44, 0x38, // o
+        0x7C, 0x14, 0x14, 0x14, 0x08, // p
+        0x08, 0x14, 0x14, 0x18, 0x7C, // q
+        0x7C, 0x08, 0x04, 0x04, 0x08, // r
+        0x48, 0x54, 0x54, 0x54, 0x20, // s
+        0x04, 0x3F, 0x44, 0x40, 0x20, // t
+        0x3C, 0x40, 0x40, 0x20, 0x1C, // u
+        0x1C, 0x20, 0x40, 0x20, 0x1C, // v
+        0x3C, 0x40, 0x30, 0x40, 0x3C, // w
+        0x44, 0x28, 0x10, 0x28, 0x44, // x
+        0x0C, 0x50, 0x50, 0x50, 0x3C, // y
+        0x44, 0x64, 0x54, 0x4C, 0x44, // z
+        0x00, 0x08, 0x36, 0x41, 0x00, // {
+        0x00, 0x00, 0x7F, 0x00, 0x00, // |
+        0x00, 0x41, 0x36, 0x08, 0x00, // }
+        0x08, 0x08, 0x2A, 0x1C, 0x08, // ~
+    ];
+}
