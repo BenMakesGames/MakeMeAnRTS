@@ -38,7 +38,10 @@ public sealed class SignRenderer
 
             renderer.FillRect(screen.X - postWidth / 2f, screen.Y - postHeight, postWidth, postHeight, Palette.Rgb(96, 70, 44));
 
-            if (camera.Zoom < MinZoomForLabel)
+            // Barren readings still matter up close, but a map dotted with them is unreadable.
+            var labelThreshold = sign.IsBarren ? MinZoomForLabel * 1.6f : MinZoomForLabel;
+
+            if (camera.Zoom < labelThreshold)
                 continue;
 
             var label = sign.ShortLabel();

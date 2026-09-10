@@ -8,6 +8,17 @@ const string Usage = """
         --seed N                 Map seed. Omitted means a random map.
         --width N --height N     Map size in tiles.
 
+      screenshot                 Fast-forward a match and save a picture of the real game view.
+        --seed N                 Map seed.
+        --seconds N              Match time to fast-forward before the picture is taken.
+        --zoom N                 Pixels per tile. Omitted keeps the game's default.
+        --overlay NAME           Show a mineral heat map: stone, iron or gold.
+        --reveal                 Lift the fog of war.
+        --debug                  Turn on the debug overlay.
+        --select-all             Select the player's units, to show the panels populated.
+        --no-autoplay            Leave the player's seat unplayed.
+        --out PATH               Output .bmp path.
+
       map-preview                Render a generated map to an image, without opening a window.
         --seed N                 Map seed.
         --width N --height N     Map size in tiles.
@@ -40,6 +51,7 @@ try
     return (parsed.Command ?? "play") switch
     {
         "play" => PlayCommand.Run(parsed),
+        "screenshot" => ScreenshotCommand.Run(parsed),
         "map-preview" => MapPreviewCommand.Run(parsed),
         "simulate" => SimulateCommand.Run(parsed),
         "font-sample" => FontSampleCommand.Run(parsed),

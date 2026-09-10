@@ -22,7 +22,6 @@ public sealed class FogRenderer
         ArgumentNullException.ThrowIfNull(vision);
 
         var (min, max) = camera.VisibleTileRange();
-        var size = MathF.Ceiling(camera.Zoom);
 
         for (var y = min.Y; y <= max.Y; y++)
         {
@@ -33,10 +32,10 @@ public sealed class FogRenderer
                 if (vision.IsVisible(pos))
                     continue;
 
-                var screen = camera.WorldToScreen(new Vec2(x, y));
+                var (rectX, rectY, width, height) = camera.TileRect(x, y);
                 var shade = vision.IsExplored(pos) ? Remembered : Unexplored;
 
-                renderer.FillRect(MathF.Floor(screen.X), MathF.Floor(screen.Y), size, size, shade);
+                renderer.FillRect(rectX, rectY, width, height, shade);
             }
         }
     }

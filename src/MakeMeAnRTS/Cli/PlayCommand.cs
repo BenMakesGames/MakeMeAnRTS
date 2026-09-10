@@ -1,10 +1,15 @@
+using MakeMeAnRTS.Engine;
 using MakeMeAnRTS.Features.World.Generation;
+using MakeMeAnRTS.Game;
 
 namespace MakeMeAnRTS.Cli;
 
 /// <summary>Starts a normal game in a window.</summary>
 public static class PlayCommand
 {
+    private const int DefaultWindowWidth = 1280;
+    private const int DefaultWindowHeight = 800;
+
     public static int Run(CommandLineArgs args)
     {
         var settings = new WorldGenSettings
@@ -14,9 +19,18 @@ public static class PlayCommand
             Height = args.Int("height", 176),
         };
 
-        // TODO: hand off to the game loop once units, buildings and the HUD exist.
-        var map = WorldGenerator.Generate(settings);
-        Console.WriteLine($"Generated map seed {map.Seed} ({map.Width}x{map.Height}). The playable game is not wired up yet.");
+        var windowWidth = args.Int("window-width", DefaultWindowWidth);
+        var windowHeight = args.Int("window-height", DefaultWindowHeight);
+
+        using var platform = Platform.Create("MakeMeAnRTS", windowWidth, windowHeight, PlatformMode.Windowed);
+        using var font = BitmapFont.Create(platform.Renderer);
+
+        var renderer = new Renderer2D(platform.Renderer, font);
+        var screen = new GameScreen(settings, windowWidth, windowHeight);
+
+        Console.WriteLine($"Map seed {screen.State.Map.Seed}. Replay it with: play --seed {screen.State.Map.Seed}");
+
+        new GameLoop(platform, renderer, screen).Run();
 
         return 0;
     }

@@ -65,6 +65,25 @@ public sealed class Camera2D
 
     public GridPos ScreenToTile(Vec2 screen) => ScreenToWorld(screen).ToTile();
 
+    /// <summary>
+    /// The exact pixel rectangle a tile covers, snapped so neighbouring tiles meet without a seam.
+    /// </summary>
+    /// <remarks>
+    /// Both edges are floored, and each tile's far edge is the next tile's near edge. Rounding the
+    /// position and the size separately leaves a one-pixel gap wherever the two round in opposite
+    /// directions, which shows up as thin dark lines ruled across the map.
+    /// </remarks>
+    public (float X, float Y, float W, float H) TileRect(int tileX, int tileY)
+    {
+        var near = WorldToScreen(new Vec2(tileX, tileY));
+        var far = WorldToScreen(new Vec2(tileX + 1, tileY + 1));
+
+        var x = MathF.Floor(near.X);
+        var y = MathF.Floor(near.Y);
+
+        return (x, y, MathF.Floor(far.X) - x, MathF.Floor(far.Y) - y);
+    }
+
     public bool ViewportContains(Vec2 screen) =>
         screen.X >= Viewport.X && screen.Y >= Viewport.Y &&
         screen.X < Viewport.X + Viewport.W && screen.Y < Viewport.Y + Viewport.H;
